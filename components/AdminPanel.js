@@ -79,7 +79,7 @@ export default function AdminPanel() {
       const { data: profile, error: profileError } =
         await supabase
           .from("profiles")
-          .select("role, display_name")
+          .select("role")
           .eq("id", auth.user.id)
           .maybeSingle();
 
