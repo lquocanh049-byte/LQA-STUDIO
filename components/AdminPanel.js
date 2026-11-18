@@ -23,7 +23,7 @@ import { CATEGORIES } from "@/lib/categories";
 // CẤU HÌNH UPLOAD
 // ==================================================
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 const ALLOWED_TYPES = [
   "image/png",
@@ -40,11 +40,12 @@ export default function AdminPanel() {
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState(CATEGORIES[0].slug);
   const [description, setDescription] = useState("");
-  const [file, setFile] = useState(null);
+  const [files, setFiles] = useState([]);
 
   const [busy, setBusy] = useState(false);
   const [loading, setLoading] = useState(false);
   const [actionId, setActionId] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState("");
 
   const [notice, setNotice] = useState("");
   const [ok, setOk] = useState(false);
@@ -134,7 +135,31 @@ export default function AdminPanel() {
   }, []);
 
   // ==================================================
-  // THÊM LAYOUT
+  // CHỌN NHIỀU ẢNH
+  // ==================================================
+
+  function handleFilesChange(e) {
+    const selectedFiles = Array.from(e.target.files || []);
+
+    setFiles(selectedFiles);
+    showMessage("");
+  }
+
+  // ==================================================
+  // TẠO TÊN FILE AN TOÀN
+  // ==================================================
+
+  function makeSafeFileName(name) {
+    return name
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9._-]/g, "-")
+      .replace(/-+/g, "-")
+      .slice(-100) || "layout-image";
+  }
+
+  // ==================================================
+  // THÊM MỘT HOẶC NHIỀU LAYOUT
   // ==================================================
 
   async function addLayout(e) {
@@ -151,24 +176,56 @@ export default function AdminPanel() {
       return;
     }
 
+    // Tách tên theo dấu phẩy
+    const titles = trimmedTitle
+      .split(",")
+      .map((item) => item.trim());
+
+    if (titles.some((item) => !item)) {
+      showMessage("Tên layout không được để trống giữa các dấu phẩy.");
+      return;
+    }
+
+    if (titles.some((item) => item.length > 80)) {
+      showMessage("Mỗi tên layout không được vượt quá 80 ký tự.");
+      return;
+    }
+
     if (!CATEGORIES.some((c) => c.slug === category)) {
       showMessage("Danh mục không hợp lệ.");
       return;
     }
 
-    if (!file) {
+    if (files.length === 0) {
       showMessage("Bạn chưa chọn ảnh layout.");
       return;
     }
 
-    if (!ALLOWED_TYPES.includes(file.type)) {
-      showMessage("Chỉ hỗ trợ PNG, JPG, WEBP và GIF.");
+    // Kiểm tra số lượng tên và ảnh
+    if (titles.length !== files.length) {
+      showMessage(
+        `Bạn nhập ${titles.length} tên nhưng chọn ${files.length} ảnh. Hai số lượng phải bằng nhau.`
+      );
       return;
     }
 
-    if (file.size > MAX_FILE_SIZE) {
-      showMessage("Ảnh vượt quá 50MB. Hãy chọn ảnh nhỏ hơn.");
-      return;
+    // Kiểm tra từng ảnh
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        showMessage(
+          `Ảnh thứ ${i + 1} không đúng định dạng. Chỉ hỗ trợ PNG, JPG, WEBP và GIF.`
+        );
+        return;
+      }
+
+      if (file.size > MAX_FILE_SIZE) {
+        showMessage(
+          `Ảnh thứ ${i + 1} vượt quá 50MB.`
+        );
+        return;
+      }
     }
 
     const supabase = getSupabase();
@@ -180,66 +237,87 @@ export default function AdminPanel() {
 
     setBusy(true);
 
-    let uploadedPath = null;
+    const uploadedPaths = [];
 
     try {
-      const safeName = file.name
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .replace(/[^a-zA-Z0-9._-]/g, "-")
-        .replace(/-+/g, "-")
-        .slice(-100);
+      const rows = [];
 
-      const fileName = safeName || "layout-image";
+      // Tải từng ảnh theo thứ tự
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
 
-      uploadedPath = `${category}/${Date.now()}-${fileName}`;
+        setUploadProgress(
+          `Đang tải ảnh ${i + 1}/${files.length}...`
+        );
 
-      const { error: uploadError } = await supabase.storage
-        .from("layouts")
-        .upload(uploadedPath, file, {
-          cacheControl: "3600",
-          upsert: false,
-          contentType: file.type
-        });
+        const safeName = makeSafeFileName(file.name);
 
-      if (uploadError) throw uploadError;
+        const uploadedPath =
+          `${category}/${Date.now()}-${i}-${safeName}`;
 
-      const { error: insertError } = await supabase
-        .from("layouts")
-        .insert({
-          title: trimmedTitle,
+        const { error: uploadError } = await supabase.storage
+          .from("layouts")
+          .upload(uploadedPath, file, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: file.type
+          });
+
+        if (uploadError) throw uploadError;
+
+        uploadedPaths.push(uploadedPath);
+
+        // Ghép tên với ảnh tương ứng
+        rows.push({
+          title: titles[i],
           category,
           description: description.trim(),
           image_path: uploadedPath,
           is_published: true,
-          sort_order: 0,
+          sort_order: i,
           created_by: user.id
         });
+      }
+
+      // Lưu tất cả layout vào database
+      setUploadProgress("Đang lưu dữ liệu...");
+
+      const { error: insertError } = await supabase
+        .from("layouts")
+        .insert(rows);
 
       if (insertError) throw insertError;
 
       setTitle("");
       setDescription("");
-      setFile(null);
+      setFiles([]);
 
       formRef.current?.reset();
 
-      showMessage("Đã thêm layout vào thư viện.", true);
+      setUploadProgress("");
+
+      showMessage(
+        `Đã đăng thành công ${files.length} layout vào thư viện.`,
+        true
+      );
 
       await load();
 
     } catch (error) {
       console.error("Add layout error:", error);
 
-      if (uploadedPath) {
+      // Xóa các ảnh đã tải lên nếu lưu dữ liệu thất bại
+      if (uploadedPaths.length > 0) {
         const { error: cleanupError } = await supabase.storage
           .from("layouts")
-          .remove([uploadedPath]);
+          .remove(uploadedPaths);
 
         if (cleanupError) {
           console.error("Storage cleanup error:", cleanupError);
         }
       }
+
+      setUploadProgress("");
 
       showMessage(
         error.message || "Không thể thêm layout. Vui lòng thử lại."
@@ -551,10 +629,14 @@ export default function AdminPanel() {
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
-                placeholder="Ví dụ: Bảng 01 - Đỏ đen"
+                placeholder="Ví dụ: 01,02,03"
                 required
-                maxLength={80}
+                maxLength={500}
               />
+
+              <small>
+                Nhập nhiều tên và ngăn cách bằng dấu phẩy.
+              </small>
             </label>
 
             <label>
@@ -587,30 +669,64 @@ export default function AdminPanel() {
               <Upload size={20} />
 
               <span>
-                {file
-                  ? file.name
-                  : "Chọn ảnh từ thiết bị"}
+                {files.length > 0
+                  ? `Đã chọn ${files.length} ảnh`
+                  : "Chọn một hoặc nhiều ảnh từ thiết bị"}
               </span>
 
               <small>
-                PNG, JPG, WEBP, GIF · Tối đa 50MB
+                PNG, JPG, WEBP, GIF · Tối đa 50MB/ảnh
               </small>
 
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp,image/gif"
-                onChange={(e) =>
-                  setFile(e.target.files?.[0] || null)
-                }
+                multiple
+                onChange={handleFilesChange}
               />
             </label>
+
+            {/* DANH SÁCH ẢNH ĐÃ CHỌN */}
+
+            {files.length > 0 && (
+              <div className="selected-files">
+                <b>Danh sách ảnh đã chọn:</b>
+
+                {files.map((file, index) => (
+                  <div
+                    key={`${file.name}-${index}`}
+                    className="selected-file-item"
+                  >
+                    <span>
+                      {index + 1}. {file.name}
+                    </span>
+
+                    <small>
+                      {titlesForDisplay(title)[index] || "Chưa có tên"}
+                    </small>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {busy && (
+              <div className="upload-progress">
+                <div className="loader" />
+                <span>{uploadProgress}</span>
+              </div>
+            )}
 
             <button
               className="button button-primary full-button"
               disabled={busy}
               type="submit"
             >
-              {busy ? "Đang tải lên..." : "Đăng layout"}
+              {busy
+                ? uploadProgress || "Đang tải lên..."
+                : files.length > 1
+                  ? `Đăng ${files.length} layout`
+                  : "Đăng layout"}
+
               <Upload size={17} />
             </button>
 
@@ -746,4 +862,14 @@ export default function AdminPanel() {
       </div>
     </div>
   );
+}
+
+// ==================================================
+// HIỂN THỊ TÊN THEO THỨ TỰ
+// ==================================================
+
+function titlesForDisplay(value) {
+  return value
+    .split(",")
+    .map((item) => item.trim());
 }
