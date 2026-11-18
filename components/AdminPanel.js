@@ -23,7 +23,7 @@ import { CATEGORIES } from "@/lib/categories";
 // CẤU HÌNH UPLOAD
 // ==================================================
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 const ALLOWED_TYPES = [
   "image/png",
@@ -167,7 +167,7 @@ export default function AdminPanel() {
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      showMessage("Ảnh vượt quá 100MB. Hãy chọn ảnh nhỏ hơn.");
+      showMessage("Ảnh vượt quá 50MB. Hãy chọn ảnh nhỏ hơn.");
       return;
     }
 
@@ -593,7 +593,7 @@ export default function AdminPanel() {
               </span>
 
               <small>
-                PNG, JPG, WEBP, GIF · Tối đa 100MB
+                PNG, JPG, WEBP, GIF · Tối đa 50MB
               </small>
 
               <input
