@@ -19,7 +19,12 @@ import {
 import { getSupabase, getPublicImageUrl } from "@/lib/supabase";
 import { CATEGORIES } from "@/lib/categories";
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024;
+// ==================================================
+// CẤU HÌNH UPLOAD
+// ==================================================
+
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+
 const ALLOWED_TYPES = [
   "image/png",
   "image/jpeg",
@@ -46,10 +51,18 @@ export default function AdminPanel() {
 
   const formRef = useRef(null);
 
+  // ==================================================
+  // THÔNG BÁO
+  // ==================================================
+
   function showMessage(message, success = false) {
     setNotice(message);
     setOk(success);
   }
+
+  // ==================================================
+  // TẢI DỮ LIỆU VÀ KIỂM TRA QUYỀN ADMIN
+  // ==================================================
 
   async function load() {
     const supabase = getSupabase();
@@ -101,12 +114,16 @@ export default function AdminPanel() {
       if (error) throw error;
 
       setItems(data || []);
+
     } catch (error) {
       console.error("Admin load error:", error);
+
       setStatus("error");
+
       showMessage(
         error.message || "Không thể tải dữ liệu từ Supabase."
       );
+
     } finally {
       setLoading(false);
     }
@@ -115,6 +132,10 @@ export default function AdminPanel() {
   useEffect(() => {
     load();
   }, []);
+
+  // ==================================================
+  // THÊM LAYOUT
+  // ==================================================
 
   async function addLayout(e) {
     e.preventDefault();
@@ -146,7 +167,7 @@ export default function AdminPanel() {
     }
 
     if (file.size > MAX_FILE_SIZE) {
-      showMessage("Ảnh vượt quá 10MB. Hãy chọn ảnh nhỏ hơn.");
+      showMessage("Ảnh vượt quá 100MB. Hãy chọn ảnh nhỏ hơn.");
       return;
     }
 
@@ -170,6 +191,7 @@ export default function AdminPanel() {
         .slice(-100);
 
       const fileName = safeName || "layout-image";
+
       uploadedPath = `${category}/${Date.now()}-${fileName}`;
 
       const { error: uploadError } = await supabase.storage
@@ -199,11 +221,13 @@ export default function AdminPanel() {
       setTitle("");
       setDescription("");
       setFile(null);
+
       formRef.current?.reset();
 
       showMessage("Đã thêm layout vào thư viện.", true);
 
       await load();
+
     } catch (error) {
       console.error("Add layout error:", error);
 
@@ -220,15 +244,21 @@ export default function AdminPanel() {
       showMessage(
         error.message || "Không thể thêm layout. Vui lòng thử lại."
       );
+
     } finally {
       setBusy(false);
     }
   }
 
+  // ==================================================
+  // ẨN / HIỆN LAYOUT
+  // ==================================================
+
   async function togglePublish(item) {
     if (actionId || busy) return;
 
     const supabase = getSupabase();
+
     if (!supabase) return;
 
     setActionId(item.id);
@@ -237,7 +267,9 @@ export default function AdminPanel() {
     try {
       const { error } = await supabase
         .from("layouts")
-        .update({ is_published: !item.is_published })
+        .update({
+          is_published: !item.is_published
+        })
         .eq("id", item.id);
 
       if (error) throw error;
@@ -250,12 +282,20 @@ export default function AdminPanel() {
       );
 
       await load();
+
     } catch (error) {
-      showMessage(error.message || "Không thể cập nhật layout.");
+      showMessage(
+        error.message || "Không thể cập nhật layout."
+      );
+
     } finally {
       setActionId(null);
     }
   }
+
+  // ==================================================
+  // SỬA TÊN LAYOUT
+  // ==================================================
 
   async function editItem(item) {
     if (actionId || busy) return;
@@ -280,6 +320,7 @@ export default function AdminPanel() {
     }
 
     const supabase = getSupabase();
+
     if (!supabase) return;
 
     setActionId(item.id);
@@ -288,19 +329,30 @@ export default function AdminPanel() {
     try {
       const { error } = await supabase
         .from("layouts")
-        .update({ title: trimmed })
+        .update({
+          title: trimmed
+        })
         .eq("id", item.id);
 
       if (error) throw error;
 
       showMessage("Đã cập nhật tên layout.", true);
+
       await load();
+
     } catch (error) {
-      showMessage(error.message || "Không thể sửa tên layout.");
+      showMessage(
+        error.message || "Không thể sửa tên layout."
+      );
+
     } finally {
       setActionId(null);
     }
   }
+
+  // ==================================================
+  // XÓA LAYOUT
+  // ==================================================
 
   async function removeItem(item) {
     if (actionId || busy) return;
@@ -312,6 +364,7 @@ export default function AdminPanel() {
     if (!confirmed) return;
 
     const supabase = getSupabase();
+
     if (!supabase) return;
 
     setActionId(item.id);
@@ -331,21 +384,31 @@ export default function AdminPanel() {
 
       if (storageError) {
         console.error("Storage delete error:", storageError);
+
         showMessage(
           "Đã xóa dữ liệu layout nhưng chưa xóa được ảnh trong Storage.",
           false
         );
+
       } else {
         showMessage("Đã xóa layout thành công.", true);
       }
 
       await load();
+
     } catch (error) {
-      showMessage(error.message || "Không thể xóa layout.");
+      showMessage(
+        error.message || "Không thể xóa layout."
+      );
+
     } finally {
       setActionId(null);
     }
   }
+
+  // ==================================================
+  // GIAO DIỆN TRẠNG THÁI
+  // ==================================================
 
   if (status === "checking") {
     return (
@@ -374,8 +437,14 @@ export default function AdminPanel() {
         <div className="empty-state">
           <AlertCircle size={36} />
           <h2>Không thể tải dữ liệu</h2>
-          <p>{notice || "Đã xảy ra lỗi khi kết nối Supabase."}</p>
-          <button className="button button-primary" onClick={load}>
+          <p>
+            {notice || "Đã xảy ra lỗi khi kết nối Supabase."}
+          </p>
+
+          <button
+            className="button button-primary"
+            onClick={load}
+          >
             <RefreshCw size={16} /> Thử lại
           </button>
         </div>
@@ -390,7 +459,11 @@ export default function AdminPanel() {
           <ShieldCheck size={36} />
           <h2>Đăng nhập để tiếp tục</h2>
           <p>Khu vực này chỉ dành cho quản trị viên.</p>
-          <Link className="button button-primary" href="/dang-nhap">
+
+          <Link
+            className="button button-primary"
+            href="/dang-nhap"
+          >
             Đăng nhập
           </Link>
         </div>
@@ -407,6 +480,7 @@ export default function AdminPanel() {
           <p>
             Tài khoản hiện tại chưa được cấp quyền quản trị.
           </p>
+
           <Link className="text-link" href="/">
             Quay về trang chủ
           </Link>
@@ -415,8 +489,13 @@ export default function AdminPanel() {
     );
   }
 
+  // ==================================================
+  // GIAO DIỆN ADMIN
+  // ==================================================
+
   return (
     <div className="container page-shell admin-shell">
+
       <div className="page-intro">
         <div className="eyebrow">
           CONTROL CENTER / LQA STUDIO
@@ -435,18 +514,28 @@ export default function AdminPanel() {
 
       {notice && (
         <div className={`notice ${ok ? "success" : "error"}`}>
-          {ok ? <CheckCircle2 size={17} /> : <AlertCircle size={17} />}
+          {ok ? (
+            <CheckCircle2 size={17} />
+          ) : (
+            <AlertCircle size={17} />
+          )}
+
           <span>{notice}</span>
         </div>
       )}
 
       <div className="admin-grid">
+
+        {/* THÊM LAYOUT */}
+
         <section className="admin-panel">
+
           <div className="panel-heading">
             <div>
               <div className="eyebrow">NEW CONTENT</div>
               <h2>Thêm layout</h2>
             </div>
+
             <ImagePlus />
           </div>
 
@@ -455,8 +544,10 @@ export default function AdminPanel() {
             className="admin-form"
             onSubmit={addLayout}
           >
+
             <label>
               Tên layout
+
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -468,6 +559,7 @@ export default function AdminPanel() {
 
             <label>
               Danh mục
+
               <select
                 value={category}
                 onChange={(e) => setCategory(e.target.value)}
@@ -482,6 +574,7 @@ export default function AdminPanel() {
 
             <label>
               Mô tả (không bắt buộc)
+
               <textarea
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
@@ -492,10 +585,17 @@ export default function AdminPanel() {
 
             <label className="file-picker">
               <Upload size={20} />
+
               <span>
-                {file ? file.name : "Chọn ảnh từ thiết bị"}
+                {file
+                  ? file.name
+                  : "Chọn ảnh từ thiết bị"}
               </span>
-              <small>PNG, JPG, WEBP, GIF · Tối đa 10MB</small>
+
+              <small>
+                PNG, JPG, WEBP, GIF · Tối đa 100MB
+              </small>
+
               <input
                 type="file"
                 accept="image/png,image/jpeg,image/webp,image/gif"
@@ -513,16 +613,23 @@ export default function AdminPanel() {
               {busy ? "Đang tải lên..." : "Đăng layout"}
               <Upload size={17} />
             </button>
+
           </form>
         </section>
 
+        {/* DANH SÁCH LAYOUT */}
+
         <section className="admin-panel">
+
           <div className="panel-heading">
             <div>
               <div className="eyebrow">CONTENT LIBRARY</div>
+
               <h2>
                 Layout hiện có{" "}
-                <span className="count-pill">{items.length}</span>
+                <span className="count-pill">
+                  {items.length}
+                </span>
               </h2>
             </div>
 
@@ -546,14 +653,18 @@ export default function AdminPanel() {
               <div className="loader" />
               <p>Đang tải danh sách...</p>
             </div>
+
           ) : items.length === 0 ? (
             <div className="empty-admin">
               Chưa có layout. Hãy thêm ảnh đầu tiên.
             </div>
+
           ) : (
             <div className="admin-list">
+
               {items.map((item) => (
                 <div className="admin-item" key={item.id}>
+
                   <img
                     src={getPublicImageUrl(item.image_path)}
                     alt={item.title}
@@ -561,6 +672,7 @@ export default function AdminPanel() {
                   />
 
                   <div className="admin-item-text">
+
                     <b>{item.title}</b>
 
                     <small>
@@ -580,9 +692,11 @@ export default function AdminPanel() {
                         ? "Đang hiển thị"
                         : "Đang ẩn"}
                     </span>
+
                   </div>
 
                   <div className="admin-item-actions">
+
                     <button
                       className="icon-button"
                       type="button"
@@ -620,11 +734,14 @@ export default function AdminPanel() {
                     >
                       <Trash2 size={17} />
                     </button>
+
                   </div>
                 </div>
               ))}
+
             </div>
           )}
+
         </section>
       </div>
     </div>
