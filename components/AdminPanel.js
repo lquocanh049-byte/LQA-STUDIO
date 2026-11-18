@@ -19,7 +19,7 @@ import {
 import { getSupabase, getPublicImageUrl } from "@/lib/supabase";
 import { CATEGORIES } from "@/lib/categories";
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_FILE_SIZE = 100 * 1024 * 1024;
 const ALLOWED_TYPES = [
   "image/png",
   "image/jpeg",
