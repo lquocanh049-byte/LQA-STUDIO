@@ -51,6 +51,7 @@ export default function AdminPanel() {
   const [ok, setOk] = useState(false);
 
   const formRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   // ==================================================
   // THÔNG BÁO
@@ -135,14 +136,53 @@ export default function AdminPanel() {
   }, []);
 
   // ==================================================
-  // CHỌN NHIỀU ẢNH
+  // CHỌN ẢNH NHIỀU LẦN - KHÔNG MẤT ẢNH CŨ
   // ==================================================
 
   function handleFilesChange(e) {
     const selectedFiles = Array.from(e.target.files || []);
 
-    setFiles(selectedFiles);
+    if (selectedFiles.length === 0) return;
+
+    setFiles((prev) => {
+      const newFiles = selectedFiles.filter((file) => {
+        return !prev.some(
+          (old) =>
+            old.name === file.name &&
+            old.size === file.size &&
+            old.lastModified === file.lastModified
+        );
+      });
+
+      return [...prev, ...newFiles];
+    });
+
+    // Cho phép chọn lại file ở lần tiếp theo
+    e.target.value = "";
+
     showMessage("");
+  }
+
+  // ==================================================
+  // XÓA ẢNH ĐÃ CHỌN
+  // ==================================================
+
+  function removeSelectedFile(index) {
+    if (busy) return;
+
+    setFiles((prev) =>
+      prev.filter((_, i) => i !== index)
+    );
+  }
+
+  // ==================================================
+  // TÁCH TÊN LAYOUT
+  // ==================================================
+
+  function titlesForDisplay(value) {
+    return value
+      .split(",")
+      .map((item) => item.trim());
   }
 
   // ==================================================
@@ -176,18 +216,19 @@ export default function AdminPanel() {
       return;
     }
 
-    // Tách tên theo dấu phẩy
-    const titles = trimmedTitle
-      .split(",")
-      .map((item) => item.trim());
+    const titles = titlesForDisplay(trimmedTitle);
 
     if (titles.some((item) => !item)) {
-      showMessage("Tên layout không được để trống giữa các dấu phẩy.");
+      showMessage(
+        "Tên layout không được để trống giữa các dấu phẩy."
+      );
       return;
     }
 
     if (titles.some((item) => item.length > 80)) {
-      showMessage("Mỗi tên layout không được vượt quá 80 ký tự.");
+      showMessage(
+        "Mỗi tên layout không được vượt quá 80 ký tự."
+      );
       return;
     }
 
@@ -201,7 +242,6 @@ export default function AdminPanel() {
       return;
     }
 
-    // Kiểm tra số lượng tên và ảnh
     if (titles.length !== files.length) {
       showMessage(
         `Bạn nhập ${titles.length} tên nhưng chọn ${files.length} ảnh. Hai số lượng phải bằng nhau.`
@@ -209,7 +249,7 @@ export default function AdminPanel() {
       return;
     }
 
-    // Kiểm tra từng ảnh
+    // Kiểm tra ảnh
     for (let i = 0; i < files.length; i++) {
       const file = files[i];
 
@@ -231,18 +271,19 @@ export default function AdminPanel() {
     const supabase = getSupabase();
 
     if (!supabase || !user) {
-      showMessage("Không tìm thấy phiên đăng nhập. Hãy tải lại trang.");
+      showMessage(
+        "Không tìm thấy phiên đăng nhập. Hãy tải lại trang."
+      );
       return;
     }
 
     setBusy(true);
 
     const uploadedPaths = [];
+    const rows = [];
 
     try {
-      const rows = [];
-
-      // Tải từng ảnh theo thứ tự
+      // Tải từng ảnh lên Storage
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
 
@@ -267,7 +308,6 @@ export default function AdminPanel() {
 
         uploadedPaths.push(uploadedPath);
 
-        // Ghép tên với ảnh tương ứng
         rows.push({
           title: titles[i],
           category,
@@ -279,7 +319,7 @@ export default function AdminPanel() {
         });
       }
 
-      // Lưu tất cả layout vào database
+      // Lưu tất cả dữ liệu vào database
       setUploadProgress("Đang lưu dữ liệu...");
 
       const { error: insertError } = await supabase
@@ -287,6 +327,8 @@ export default function AdminPanel() {
         .insert(rows);
 
       if (insertError) throw insertError;
+
+      const totalUploaded = files.length;
 
       setTitle("");
       setDescription("");
@@ -297,7 +339,7 @@ export default function AdminPanel() {
       setUploadProgress("");
 
       showMessage(
-        `Đã đăng thành công ${files.length} layout vào thư viện.`,
+        `Đã đăng thành công ${totalUploaded} layout vào thư viện.`,
         true
       );
 
@@ -306,7 +348,7 @@ export default function AdminPanel() {
     } catch (error) {
       console.error("Add layout error:", error);
 
-      // Xóa các ảnh đã tải lên nếu lưu dữ liệu thất bại
+      // Dọn ảnh nếu lưu database thất bại
       if (uploadedPaths.length > 0) {
         const { error: cleanupError } = await supabase.storage
           .from("layouts")
@@ -393,7 +435,9 @@ export default function AdminPanel() {
     }
 
     if (trimmed.length > 80) {
-      showMessage("Tên layout không được vượt quá 80 ký tự.");
+      showMessage(
+        "Tên layout không được vượt quá 80 ký tự."
+      );
       return;
     }
 
@@ -665,13 +709,15 @@ export default function AdminPanel() {
               />
             </label>
 
-            <label className="file-picker">
+            {/* CHỌN ẢNH NHIỀU LẦN */}
+
+            <div className="file-picker">
               <Upload size={20} />
 
               <span>
                 {files.length > 0
                   ? `Đã chọn ${files.length} ảnh`
-                  : "Chọn một hoặc nhiều ảnh từ thiết bị"}
+                  : "Chọn ảnh từ thiết bị"}
               </span>
 
               <small>
@@ -679,31 +725,56 @@ export default function AdminPanel() {
               </small>
 
               <input
+                ref={fileInputRef}
                 type="file"
                 accept="image/png,image/jpeg,image/webp,image/gif"
                 multiple
                 onChange={handleFilesChange}
+                disabled={busy}
               />
-            </label>
+
+              <button
+                type="button"
+                className="button button-primary"
+                disabled={busy}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <ImagePlus size={16} />
+                Chọn thêm ảnh
+              </button>
+            </div>
 
             {/* DANH SÁCH ẢNH ĐÃ CHỌN */}
 
             {files.length > 0 && (
               <div className="selected-files">
-                <b>Danh sách ảnh đã chọn:</b>
+                <b>
+                  Danh sách ảnh đã chọn ({files.length})
+                </b>
 
                 {files.map((file, index) => (
                   <div
-                    key={`${file.name}-${index}`}
+                    key={`${file.name}-${file.size}-${file.lastModified}-${index}`}
                     className="selected-file-item"
                   >
-                    <span>
-                      {index + 1}. {file.name}
-                    </span>
+                    <div>
+                      <span>
+                        {index + 1}. {file.name}
+                      </span>
 
-                    <small>
-                      {titlesForDisplay(title)[index] || "Chưa có tên"}
-                    </small>
+                      <small>
+                        {titlesForDisplay(title)[index] || "Chưa có tên"}
+                      </small>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => removeSelectedFile(index)}
+                      disabled={busy}
+                    >
+                      <Trash2 size={15} />
+                      Xóa
+                    </button>
                   </div>
                 ))}
               </div>
@@ -862,14 +933,4 @@ export default function AdminPanel() {
       </div>
     </div>
   );
-}
-
-// ==================================================
-// HIỂN THỊ TÊN THEO THỨ TỰ
-// ==================================================
-
-function titlesForDisplay(value) {
-  return value
-    .split(",")
-    .map((item) => item.trim());
 }
